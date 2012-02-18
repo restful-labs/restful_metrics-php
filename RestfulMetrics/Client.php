@@ -45,6 +45,13 @@ class RestfulMetrics_Client
     private $_appId;
     
     /**
+    * Distinct user identifier - optionally set globally
+    * 
+    * @var string
+    */
+    private $_distinctId;
+    
+    /**
     * @param string $apikey     Account API Key
     * @param string $app_id     Application identifier
     * 
@@ -108,6 +115,10 @@ class RestfulMetrics_Client
         {
             $data['distinct_id'] = $distinct_user_id;
         }
+        elseif($this->_distinctId)
+        {
+            $data['distinct_id'] = $this->_distinctId;
+        }
         
         $json_data = json_encode($data);        
         
@@ -141,6 +152,16 @@ class RestfulMetrics_Client
     public function setApplicationId($app_id)
     {
         $this->_appId = $app_id;
+    }
+    
+    /**
+    * Optionally set the user's distinct_id globally
+    * 
+    * @param string $id
+    */
+    public function setDistinctId($id)
+    {
+        $this->_distinctId = $id;
     }
     
     private function _executeRequest($endpoint, $json_data)
