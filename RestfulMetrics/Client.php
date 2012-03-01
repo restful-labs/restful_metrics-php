@@ -141,13 +141,15 @@ class RestfulMetrics_Client
                     'value' => $value));
         }
         
-        if($distinct_user_id)
+        if(isset($distinct_user_id))
         {
-            $data['distinct_id'] = $distinct_user_id;
+            $key = array_key_exists("metric", $data) ? "metric" : "compound_metric";
+            $data[$key]['distinct_id'] = $distinct_user_id;
         }
-        elseif($this->_distinctId)
+        elseif(isset($this->_distinctId))
         {
-            $data['distinct_id'] = $this->_distinctId;
+            $key = array_key_exists("metric", $data) ? "metric" : "compound_metric";
+            $data[$key]['distinct_id'] = $this->_distinctId;
         }
         
         $json_data = json_encode($data);        
