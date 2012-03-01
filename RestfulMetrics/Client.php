@@ -8,14 +8,39 @@ require_once dirname(__FILE__) . '/Exception.php';
 * Usage: 
 * 
 * require 'path/to/RestfulMetrics/Client.php';
+* 
 * $rm = new RestfulMetrics_Client("apikey", "app_id");
-* $rm->addMetric("foo", 1, "user_id");
+* $rm->addMetric("simple", 1);
+* $rm->addMetric("compound", array("a", "b", "c"));
 *  
 * @author   Adam Huttler <adam@restul-labs.com>
-* @version  0.1
+* @version  0.2
 */
 class RestfulMetrics_Client
 {
+    /**
+    * Whether the client should automatically assign and track distinct user ids. This is 
+    * ignored when PHP is running in CLI.
+    */
+    const AUTO_DISTINCT_ID        = true;
+    
+    /**
+    * When using automatic distinct user tracking, this will be set as the name of the cookie. 
+    */
+    const AUTO_DISTINCT_ID_COOKIE = "__rm_distinct_id";
+
+    /**
+    * When using automatic distinct user tracking, this will be set as the path for which the 
+    * cookie is valid. 
+    */
+    const AUTO_DISTINCT_ID_PATH   = "/";
+    
+    /**
+    * When using automatic distinct user tracking, this will be set as the domain for which the 
+    * cookie is valid. If set to false, then it will default to $_SERVER['HTTP_HOST'].
+    */
+    const AUTO_DISTINCT_ID_DOMAIN = false;
+    
     /**
     * Boolean flag to send requests asynchronously
     * 
@@ -45,7 +70,7 @@ class RestfulMetrics_Client
     private $_appId;
     
     /**
-    * Distinct user identifier - optionally set globally
+    * Distinct user identifier - optionally set globally and/or automatically
     * 
     * @var string
     */
@@ -68,6 +93,11 @@ class RestfulMetrics_Client
         {
             $this->_appId = $app_id;
         }
+        
+        if(self::AUTO_DISTINCT_ID && ('cli' !== PHP_SAPI))
+        {
+            $this->_autoTrackDistinctId();
+        }
     }
 
     /**
@@ -75,7 +105,7 @@ class RestfulMetrics_Client
     * 
     * @param string $metric                 The name of the metric
     * @param mixed $value                   The value - should be a scalar for standard metrics or an array for compound metrics
-    * @param mixed $distinct_user_id        Optional unique user identifier
+    * @param mixed $distinct_user_id        Optional unique user identifier for this metric. Note that this is generally assigned globally instead.
     */
     public function addMetric($metric, $value, $distinct_user_id = null)
     {
@@ -162,6 +192,30 @@ class RestfulMetrics_Client
     public function setDistinctId($id)
     {
         $this->_distinctId = $id;
+    }
+    
+    private function _autoTrackDistinctId()
+    {
+        if(isset($_COOKIE[self::AUTO_DISTINCT_ID_COOKIE]))
+        {
+            $this->setDistinctId($_COOKIE[self::AUTO_DISTINCT_ID_COOKIE]);
+        }
+        elseif(headers_sent($file, $line))
+        {
+            trigger_error("Can't set distinct_id cookie since headers were already sent at $file:$line");
+        }
+        else
+        {
+            $cookie = self::AUTO_DISTINCT_ID_COOKIE;
+            $value  = sha1(uniqid(uniqid("rm", true), true));
+            $expiry = time() + 86400 * 365 * 5;
+            $path   = self::AUTO_DISTINCT_ID_PATH;
+            $domain = self::AUTO_DISTINCT_ID_DOMAIN ? self::AUTO_DISTINCT_ID_DOMAIN : $_SERVER['HTTP_HOST'];
+            
+            setcookie($cookie, $value, $expiry, $path, $domain);
+            
+            $this->setDistinctId($value);
+        }
     }
     
     private function _executeRequest($endpoint, $json_data)

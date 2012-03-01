@@ -1,1 +1,14 @@
 A simple PHP client for RESTful Metrics. See http://www.restfulmetrics.com
+
+NOTE: 
+There are a few class constants in Client.php that can be used for configuration purposes. 
+
+USAGE:
+
+require '[PATH/TO]/RestfulMetrics/Client.php';
+$rm = new RestfulMetrics_Client([APIKEY], [APP_ID]);
+$rm->addMetric("simple", 1);
+$rm->addMetric("compound", array("a", "b", "c"));
+
+VERSION:
+0.2
