@@ -1,9 +1,13 @@
 <?php
 
-require_once dirname(__FILE__) . '/Exception.php';
+if(!class_exists("RestfulMetrics"))
+{
+    require dirname(__FILE__) . "/../RestfulMetrics.php";
+}
 
 /**
-* Simple client for RESTful Metrics.
+* Simple client for RESTful Metrics. May be used directly if you don't want 
+* to use the abstract RestfulMetrics class.
 * 
 * Usage: 
 * 
@@ -13,34 +17,9 @@ require_once dirname(__FILE__) . '/Exception.php';
 * $rm->addMetric("simple", 1);
 * $rm->addMetric("compound", array("a", "b", "c"));
 *  
-* @author   Adam Huttler <adam@restul-labs.com>
-* @version  0.2
 */
 class RestfulMetrics_Client
 {
-    /**
-    * Whether the client should automatically assign and track distinct user ids. This is 
-    * ignored when PHP is running in CLI.
-    */
-    const AUTO_DISTINCT_ID        = true;
-    
-    /**
-    * When using automatic distinct user tracking, this will be set as the name of the cookie. 
-    */
-    const AUTO_DISTINCT_ID_COOKIE = "__rm_distinct_id";
-
-    /**
-    * When using automatic distinct user tracking, this will be set as the path for which the 
-    * cookie is valid. 
-    */
-    const AUTO_DISTINCT_ID_PATH   = "/";
-    
-    /**
-    * When using automatic distinct user tracking, this will be set as the domain for which the 
-    * cookie is valid. If set to false, then it will default to $_SERVER['HTTP_HOST'].
-    */
-    const AUTO_DISTINCT_ID_DOMAIN = false;
-    
     /**
     * Boolean flag to send requests asynchronously
     * 
@@ -68,6 +47,13 @@ class RestfulMetrics_Client
     * @var string
     */
     private $_appId;
+
+    /**
+    * PDO object; needed for sending requests asynchronously as delayed jobs
+    * 
+    * @var PDO
+    */
+    private $_pdo;
     
     /**
     * Distinct user identifier - optionally set globally and/or automatically
@@ -94,7 +80,7 @@ class RestfulMetrics_Client
             $this->_appId = $app_id;
         }
         
-        if(self::AUTO_DISTINCT_ID && ('cli' !== PHP_SAPI))
+        if(RestfulMetrics::AUTO_DISTINCT_ID && ('cli' !== PHP_SAPI))
         {
             $this->_autoTrackDistinctId();
         }
@@ -105,9 +91,9 @@ class RestfulMetrics_Client
     * 
     * @param string $metric                 The name of the metric
     * @param mixed $value                   The value - should be a scalar for standard metrics or an array for compound metrics
-    * @param mixed $distinct_user_id        Optional unique user identifier for this metric. Note that this is generally assigned globally instead.
+    * @param mixed $distinct_id             Optional unique user identifier for this metric. Note that this is generally assigned globally instead.
     */
-    public function addMetric($metric, $value, $distinct_user_id = null)
+    public function addMetric($metric, $value, $distinct_id = null)
     {
         if(!$this->_apikey)
         {
@@ -122,6 +108,18 @@ class RestfulMetrics_Client
         if($this->disabled)
         {
             return true;
+        }
+        
+        if(null === $distinct_id)
+        {
+            $distinct_id = $this->_distinctId;
+        }
+        
+        if($this->asynchronous)
+        {
+            $this->_queueDelayedJob($metric, $value, $distinct_id);
+            
+            return;
         }
         
         if(is_array($value))
@@ -141,29 +139,13 @@ class RestfulMetrics_Client
                     'value' => $value));
         }
         
-        if(isset($distinct_user_id))
+        if(isset($distinct_id))
         {
             $key = array_key_exists("metric", $data) ? "metric" : "compound_metric";
-            $data[$key]['distinct_id'] = $distinct_user_id;
-        }
-        elseif(isset($this->_distinctId))
-        {
-            $key = array_key_exists("metric", $data) ? "metric" : "compound_metric";
-            $data[$key]['distinct_id'] = $this->_distinctId;
+            $data[$key]['distinct_id'] = $distinct_id;            
         }
         
-        $json_data = json_encode($data);        
-        
-        if($this->asynchronous)
-        {
-            $this->_executeAsynchronousRequest($endpoint, $json_data);
-        }
-        else
-        {
-            $response = $this->_executeRequest($endpoint, $json_data);
-            
-            return $resposne;
-        }
+        return $this->_executeRequest($endpoint, json_encode($data));
     }
     
     /**
@@ -195,12 +177,28 @@ class RestfulMetrics_Client
     {
         $this->_distinctId = $id;
     }
+ 
+    /**
+    * Set a PDO object for storing delayed jobs for asynchronous execution
+    * 
+    * @param PDO $pdo
+    */
+    public function setPdo(PDO $pdo)
+    {
+        $this->_pdo = $pdo;
+        $this->_pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    }
+    
+    public function getPdo()
+    {
+        return $this->_pdo;
+    }
     
     private function _autoTrackDistinctId()
     {
-        if(isset($_COOKIE[self::AUTO_DISTINCT_ID_COOKIE]))
+        if(isset($_COOKIE[RestfulMetrics::AUTO_DISTINCT_ID_COOKIE]))
         {
-            $this->setDistinctId($_COOKIE[self::AUTO_DISTINCT_ID_COOKIE]);
+            $this->setDistinctId($_COOKIE[RestfulMetrics::AUTO_DISTINCT_ID_COOKIE]);
         }
         elseif(headers_sent($file, $line))
         {
@@ -208,11 +206,12 @@ class RestfulMetrics_Client
         }
         else
         {
-            $cookie = self::AUTO_DISTINCT_ID_COOKIE;
+            $cookie = RestfulMetrics::AUTO_DISTINCT_ID_COOKIE;
             $value  = sha1(uniqid(uniqid("rm", true), true));
             $expiry = time() + 86400 * 365 * 5;
-            $path   = self::AUTO_DISTINCT_ID_PATH;
-            $domain = self::AUTO_DISTINCT_ID_DOMAIN ? self::AUTO_DISTINCT_ID_DOMAIN : $_SERVER['HTTP_HOST'];
+            $path   = RestfulMetrics::AUTO_DISTINCT_ID_PATH;
+            $domain = RestfulMetrics::AUTO_DISTINCT_ID_DOMAIN ? 
+                RestfulMetrics::AUTO_DISTINCT_ID_DOMAIN : $_SERVER['HTTP_HOST'];
             
             setcookie($cookie, $value, $expiry, $path, $domain);
             
@@ -256,26 +255,16 @@ class RestfulMetrics_Client
         }
     }
     
-    private function _executeAsynchronousRequest($endpoint, $json_data)
+    private function _queueDelayedJob($metric, $value, $distinct_id)
     {
-        $parts = parse_url($endpoint);
-        $port  = isset($parts['port']) ? $parts['port'] : 80;
-                
-        $fp = fsockopen($parts['host'], $port, $errno, $errstr, 30);
-        if(!$fp) 
+        if(!$this->_pdo instanceof PDO)
         {
-            throw new RestfulMetrics_Exception("Failed to establish socket connection: $errstr");
+            throw new RestfulMetrics_Exception("Can't queue a delayed job without first setting a PDO database connection");
         }
-
-        $out  = "POST " . $parts['path'] . " HTTP/1.1\r\n";
-        $out .= "Host: " . $parts['host'] . "\r\n";
-        $out .= "Authorization: {$this->_apikey}\r\n";
-        $out .= "Content-Type: application/json; charset=utf-8\r\n";
-        $out .= "Content-Length: " . strlen($json_data) . "\r\n";
-        $out .= "Connection: Close\r\n\r\n";
-        $out .= $json_data;
         
-        fwrite($fp, $out);
-        fclose($fp);
+        $table = RestfulMetrics::JOB_TABLE_PREFIX . "job";
+        
+        $this->_pdo->prepare("INSERT INTO $table (app_id,metric,value,distinct_id,created_at) VALUES (?,?,?,?,?)")
+                   ->execute(array($this->_appId, $metric, serialize($value), $distinct_id, date("Y-m-d H:i:s")));
     }
 }
