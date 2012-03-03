@@ -32,3 +32,4 @@ ASYNCHRONOUS EXECUTION VIA DELAYED JOBS:
 RestfulMetrics::setup("API_KEY", "APP_ID");
 RestfulMetrics::asynchronous(new PDO("DSN_STRING"));
 RestfulMetrics::runDelayedJobs();
+
