@@ -1,8 +1,7 @@
-RestfulMetrics-php v0.3
-=======================
+# RestfulMetrics-php v0.3
 A simple PHP library for RESTful Metrics. See http://www.restfulmetrics.com
 
-SETUP AND CONFIGURATION: 
+## Setup and Configuration 
 
 1) Adjust the class constants in the base RestfulMetrics class as needed. 
 
@@ -10,26 +9,29 @@ SETUP AND CONFIGURATION:
    Make sure to adjust the table names if you want to use non-default prefixes.
 
 
-BASIC USAGE:
+## Basic Usage
 
-RestfulMetrics::setup("API_KEY", "APP_ID");
-RestfulMetrics::asynchronous(new PDO("DSN_STRING"));
+```
+   RestfulMetrics::setup("API_KEY", "APP_ID");
+   RestfulMetrics::asynchronous(new PDO("DSN_STRING"));
 
-RestfulMetrics::addMetric("simple_metric", 1);
-RestfulMetrics::addMetric("compound_metric", array("foo", "bar");
+   RestfulMetrics::addMetric("simple_metric", 1);
+   RestfulMetrics::addMetric("compound_metric", array("foo", "bar");
+```
 
+## Alternate/Verbose Usage
 
-ALTERNATE/VERBOSE USAGE:
+```
+   require '[PATH/TO]/RestfulMetrics/Client.php';
+   $rm = new RestfulMetrics_Client([APIKEY], [APP_ID]);
+   $rm->addMetric("simple", 1);
+   $rm->addMetric("compound", array("a", "b", "c"));
+```
 
-require '[PATH/TO]/RestfulMetrics/Client.php';
-$rm = new RestfulMetrics_Client([APIKEY], [APP_ID]);
-$rm->addMetric("simple", 1);
-$rm->addMetric("compound", array("a", "b", "c"));
+## Asynchronous Execution via Delayed Jobs
 
-
-ASYNCHRONOUS EXECUTION VIA DELAYED JOBS:
-
-RestfulMetrics::setup("API_KEY", "APP_ID");
-RestfulMetrics::asynchronous(new PDO("DSN_STRING"));
-RestfulMetrics::runDelayedJobs();
-
+```
+   RestfulMetrics::setup("API_KEY", "APP_ID");
+   RestfulMetrics::asynchronous(new PDO("DSN_STRING"));
+   RestfulMetrics::runDelayedJobs();
+```
