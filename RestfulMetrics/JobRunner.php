@@ -86,10 +86,14 @@ class RestfulMetrics_JobRunner
     
     private function _logCompletedJob(array $job)
     {
+        $this->_pdo->beginTransaction();
+        
         $this->_pdo->prepare("INSERT INTO {$this->_table_log} (id,app_id,metric,value,distinct_id,created_at,sent_at) VALUES(?,?,?,?,?,?,?)")
                    ->execute(array($job['id'], $job['app_id'], $job['metric'], $job['value'], $job['distinct_id'], $job['created_at'], date("Y-m-d H:i:s")));
         
         $this->_pdo->prepare("DELETE FROM {$this->_table_jobs} WHERE id = ? LIMIT 1")
                    ->execute(array($job['id']));
+                   
+        $this->_pdo->commit();
     }
 }
